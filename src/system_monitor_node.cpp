@@ -1,4 +1,4 @@
-#include <sys/statvfs.h>  // statvfsのために追加
+#include <sys/statvfs.h>
 #include <sys/sysinfo.h>
 #include <unistd.h>
 
@@ -49,7 +49,7 @@ class SystemMonitorNode : public rclcpp::Node {
     // メモリ情報の取得
     struct sysinfo mem_info;
     sysinfo(&mem_info);
-    msg.memory_total = mem_info.totalram / (1024 * 1024);  // MBに変換
+    msg.memory_total = mem_info.totalram / (1024 * 1024);  // MB
     msg.memory_percent =
         100.0f * (mem_info.totalram - mem_info.freeram) / mem_info.totalram;
 
@@ -68,8 +68,11 @@ class SystemMonitorNode : public rclcpp::Node {
     RCLCPP_INFO(this->get_logger(), "CPU Temperature: %.2f °C",
                 msg.sensors_temperatures);
 
-    // バッテリー情報（ここでは仮の値として0.0を使用）
-    msg.sensors_battery = 0.0;
+    // バッテリー情報の取得
+    msg.sensors_battery = get_battery_level();
+
+    RCLCPP_INFO(this->get_logger(), "Battery Level: %.2f%%",
+                msg.sensors_battery);
 
     // ノードリストの取得
     msg.rosnode_list = get_rosnode_list();
@@ -84,7 +87,7 @@ class SystemMonitorNode : public rclcpp::Node {
   }
 
   float get_cpu_usage() {
-    // CPU使用率を取得するためのメソッド
+    // CPU使用率を取得
     std::ifstream stat_file("/proc/stat");
     std::string line;
     std::getline(stat_file, line);
@@ -101,26 +104,35 @@ class SystemMonitorNode : public rclcpp::Node {
         "/sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq");
     float freq;
     if (freq_file >> freq) {
-      return freq / 1000.0f;  // kHzからMHzに変換
+      return freq / 1000.0f;  // kHz2MHz
     }
     return 0.0f;
   }
 
   float get_disk_usage(const std::string &path) {
     // ディスク使用率の取得
-    struct statvfs stat;  // statvfs構造体
+    struct statvfs stat;
     if (statvfs(path.c_str(), &stat) != 0) {
-      return 0.0f;  // エラーの場合は0
+      return 0.0f;
     }
     return 100.0f * (1.0f - (float)stat.f_bfree / (float)stat.f_blocks);
   }
 
+  float get_battery_level() {
+    std::ifstream battery_file("/sys/class/power_supply/BAT0/capacity");
+    float battery_level;
+    if (battery_file >> battery_level) {
+      return battery_level;
+    }
+    return 0.0f;
+  }
+
   float get_cpu_temperature() {
-    // CPU温度の取得（Raspberry Piなどの例として）
+    // CPU温度の取得
     std::ifstream temp_file("/sys/class/thermal/thermal_zone0/temp");
     float temp;
     temp_file >> temp;
-    return temp / 1000.0f;  // ミリ度単位を度に変換
+    return temp / 1000.0f;
   }
 
   std::vector<std::string> get_rosnode_list() {
