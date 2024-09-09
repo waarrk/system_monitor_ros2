@@ -14,11 +14,18 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/SystemMonitor.msg"
 )
 
-add_executable(talker src/publisher_member_function.cpp)
-ament_target_dependencies(talker rclcpp std_msgs)
+ament_export_dependencies(rosidl_default_runtime)
+include_directories(${CMAKE_CURRENT_BINARY_DIR}/rosidl_generator_cpp)
+
+rosidl_get_typesupport_target(cpp_typesupport_target ${PROJECT_NAME} "rosidl_typesupport_cpp")
+
+add_executable(system_monitor_node src/system_monitor_node.cpp)
+
+ament_target_dependencies(system_monitor_node rclcpp std_msgs)
+target_link_libraries(system_monitor_node ${cpp_typesupport_target})
 
 install(TARGETS
-  talker
+  system_monitor_node
   DESTINATION lib/${PROJECT_NAME})
 
 ament_package()
