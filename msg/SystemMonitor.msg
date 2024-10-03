@@ -2,9 +2,15 @@
 float64 time
 
 # CPU Information
+string cpu_name
 int8 cpu_count           # Number of CPU cores
 float32 cpu_percent      # System-wide CPU utilization as a percentage
 float32 current_cpu_freq # Current CPU frequency
+
+# GPU Information
+string gpu_name
+float32 gpu_usage_percent
+float32 gpu_temperature
 
 # Memory Information
 float32 memory_total     # Total memory available (MB)

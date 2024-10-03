@@ -3,6 +3,7 @@
 #include <unistd.h>
 
 #include <chrono>
+#include <cstdlib>
 #include <fstream>
 #include <rclcpp/rclcpp.hpp>
 #include <sstream>
@@ -37,10 +38,12 @@ class SystemMonitorNode : public rclcpp::Node {
     msg.time = this->now().seconds();
 
     // CPU情報の取得
+    msg.cpu_name = get_cpu_name();
     msg.cpu_count = sysconf(_SC_NPROCESSORS_ONLN);
     msg.cpu_percent = get_cpu_usage();
     msg.current_cpu_freq = get_cpu_freq();
 
+    RCLCPP_INFO(this->get_logger(), "CPU Name: %s", msg.cpu_name.c_str());
     RCLCPP_INFO(this->get_logger(), "CPU Cores: %d", msg.cpu_count);
     RCLCPP_INFO(this->get_logger(), "CPU Usage: %.2f%%", msg.cpu_percent);
     RCLCPP_INFO(this->get_logger(), "CPU Frequency: %.2f MHz",
@@ -74,6 +77,16 @@ class SystemMonitorNode : public rclcpp::Node {
     RCLCPP_INFO(this->get_logger(), "Battery Level: %.2f%%",
                 msg.sensors_battery);
 
+    // GPU情報の取得
+    msg.gpu_name = get_gpu_name();
+    msg.gpu_usage_percent = get_gpu_usage();
+    msg.gpu_temperature = get_gpu_temperature();
+
+    RCLCPP_INFO(this->get_logger(), "GPU Name: %s", msg.gpu_name.c_str());
+    RCLCPP_INFO(this->get_logger(), "GPU Usage: %.2f%%", msg.gpu_usage_percent);
+    RCLCPP_INFO(this->get_logger(), "GPU Temperature: %.2f °C",
+                msg.gpu_temperature);
+
     // ノードリストの取得
     msg.rosnode_list = get_rosnode_list();
 
@@ -84,6 +97,20 @@ class SystemMonitorNode : public rclcpp::Node {
 
     // メッセージをパブリッシュ
     system_pub_->publish(msg);
+  }
+
+  std::string get_cpu_name() {
+    // CPUの名前を取得
+    std::ifstream cpuinfo_file("/proc/cpuinfo");
+    std::string line;
+    std::string cpu_name;
+    while (std::getline(cpuinfo_file, line)) {
+      if (line.find("model name") != std::string::npos) {
+        cpu_name = line.substr(line.find(":") + 2);
+        break;
+      }
+    }
+    return cpu_name;
   }
 
   float get_cpu_usage() {
@@ -133,6 +160,58 @@ class SystemMonitorNode : public rclcpp::Node {
     float temp;
     temp_file >> temp;
     return temp / 1000.0f;
+  }
+
+  std::string get_gpu_name() {
+    // GPUの名前を取得（nvidia-smiを使用）
+    char buffer[128];
+    std::string result = "";
+    std::shared_ptr<FILE> pipe(
+        popen("nvidia-smi --query-gpu=name --format=csv,noheader", "r"),
+        pclose);
+    if (!pipe) {
+      return "Unknown GPU";
+    }
+    while (fgets(buffer, sizeof(buffer), pipe.get()) != nullptr) {
+      result += buffer;
+    }
+    // 余分な改行や空白をトリミング
+    result.erase(result.find_last_not_of(" \n\r\t") + 1);
+    return result;
+  }
+
+  float get_gpu_usage() {
+    // GPU使用率を取得（nvidia-smiを使用）
+    char buffer[128];
+    std::string result = "";
+    std::shared_ptr<FILE> pipe(popen("nvidia-smi --query-gpu=utilization.gpu "
+                                     "--format=csv,noheader,nounits",
+                                     "r"),
+                               pclose);
+    if (!pipe) {
+      return 0.0f;
+    }
+    while (fgets(buffer, sizeof(buffer), pipe.get()) != nullptr) {
+      result += buffer;
+    }
+    return std::stof(result);
+  }
+
+  float get_gpu_temperature() {
+    // GPU温度を取得（nvidia-smiを使用）
+    char buffer[128];
+    std::string result = "";
+    std::shared_ptr<FILE> pipe(popen("nvidia-smi --query-gpu=temperature.gpu "
+                                     "--format=csv,noheader,nounits",
+                                     "r"),
+                               pclose);
+    if (!pipe) {
+      return 0.0f;
+    }
+    while (fgets(buffer, sizeof(buffer), pipe.get()) != nullptr) {
+      result += buffer;
+    }
+    return std::stof(result);
   }
 
   std::vector<std::string> get_rosnode_list() {
