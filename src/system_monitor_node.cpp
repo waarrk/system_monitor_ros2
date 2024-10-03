@@ -1,3 +1,4 @@
+#include <nvml.h>
 #include <sys/statvfs.h>
 #include <sys/sysinfo.h>
 #include <unistd.h>
@@ -24,10 +25,18 @@ class SystemMonitorNode : public rclcpp::Node {
         this->create_publisher<system_monitor_ros2::msg::SystemMonitor>(
             "system_monitor", 10);
 
+    // NVMLの初期化
+    nvmlInit();
+
     // タイマーで定期的に状態を取得
     timer_ = this->create_wall_timer(
         std::chrono::seconds(1),
         std::bind(&SystemMonitorNode::get_system_state, this));
+  }
+
+  ~SystemMonitorNode() {
+    // NVMLの終了
+    nvmlShutdown();
   }
 
  private:
@@ -131,7 +140,7 @@ class SystemMonitorNode : public rclcpp::Node {
         "/sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq");
     float freq;
     if (freq_file >> freq) {
-      return freq / 1000.0f;  // kHz2MHz
+      return freq / 1000.0f;  // kHz to MHz
     }
     return 0.0f;
   }
@@ -163,55 +172,30 @@ class SystemMonitorNode : public rclcpp::Node {
   }
 
   std::string get_gpu_name() {
-    // GPUの名前を取得（nvidia-smiを使用）
-    char buffer[128];
-    std::string result = "";
-    std::shared_ptr<FILE> pipe(
-        popen("nvidia-smi --query-gpu=name --format=csv,noheader", "r"),
-        pclose);
-    if (!pipe) {
-      return "Unknown GPU";
-    }
-    while (fgets(buffer, sizeof(buffer), pipe.get()) != nullptr) {
-      result += buffer;
-    }
-    // 余分な改行や空白をトリミング
-    result.erase(result.find_last_not_of(" \n\r\t") + 1);
-    return result;
+    // NVMLを使ってGPUの名前を取得
+    nvmlDevice_t device;
+    char gpu_name[NVML_DEVICE_NAME_BUFFER_SIZE];
+    nvmlDeviceGetHandleByIndex(0, &device);
+    nvmlDeviceGetName(device, gpu_name, NVML_DEVICE_NAME_BUFFER_SIZE);
+    return std::string(gpu_name);
   }
 
   float get_gpu_usage() {
-    // GPU使用率を取得（nvidia-smiを使用）
-    char buffer[128];
-    std::string result = "";
-    std::shared_ptr<FILE> pipe(popen("nvidia-smi --query-gpu=utilization.gpu "
-                                     "--format=csv,noheader,nounits",
-                                     "r"),
-                               pclose);
-    if (!pipe) {
-      return 0.0f;
-    }
-    while (fgets(buffer, sizeof(buffer), pipe.get()) != nullptr) {
-      result += buffer;
-    }
-    return std::stof(result);
+    // NVMLを使ってGPU使用率を取得
+    nvmlDevice_t device;
+    nvmlUtilization_t utilization;
+    nvmlDeviceGetHandleByIndex(0, &device);
+    nvmlDeviceGetUtilizationRates(device, &utilization);
+    return utilization.gpu;
   }
 
   float get_gpu_temperature() {
-    // GPU温度を取得（nvidia-smiを使用）
-    char buffer[128];
-    std::string result = "";
-    std::shared_ptr<FILE> pipe(popen("nvidia-smi --query-gpu=temperature.gpu "
-                                     "--format=csv,noheader,nounits",
-                                     "r"),
-                               pclose);
-    if (!pipe) {
-      return 0.0f;
-    }
-    while (fgets(buffer, sizeof(buffer), pipe.get()) != nullptr) {
-      result += buffer;
-    }
-    return std::stof(result);
+    // NVMLを使ってGPU温度を取得
+    nvmlDevice_t device;
+    unsigned int temperature;
+    nvmlDeviceGetHandleByIndex(0, &device);
+    nvmlDeviceGetTemperature(device, NVML_TEMPERATURE_GPU, &temperature);
+    return static_cast<float>(temperature);
   }
 
   std::vector<std::string> get_rosnode_list() {

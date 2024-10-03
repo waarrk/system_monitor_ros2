@@ -19,10 +19,16 @@ include_directories(${CMAKE_CURRENT_BINARY_DIR}/rosidl_generator_cpp)
 
 rosidl_get_typesupport_target(cpp_typesupport_target ${PROJECT_NAME} "rosidl_typesupport_cpp")
 
+set(NVML_LIB /usr/lib/x86_64-linux-gnu/libnvidia-ml.so)
+
 add_executable(system_monitor_node src/system_monitor_node.cpp)
 
 ament_target_dependencies(system_monitor_node rclcpp std_msgs)
-target_link_libraries(system_monitor_node ${cpp_typesupport_target})
+
+target_link_libraries(system_monitor_node
+  ${cpp_typesupport_target}
+  ${NVML_LIB}
+)
 
 install(TARGETS
   system_monitor_node
