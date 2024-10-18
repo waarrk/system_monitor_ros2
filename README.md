@@ -9,7 +9,7 @@
 
 ```bash
 colcon build
-ros2 run system_monitor_ros2 system_monitor_ros2
+ros2 run system_monitor_ros2 system_monitor_node
 source install/setup.bash
 ```
 
